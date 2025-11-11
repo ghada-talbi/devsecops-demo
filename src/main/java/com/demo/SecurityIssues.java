@@ -34,3 +34,4 @@ public class SecurityIssues {
     // ❌ SECRET: Clé API exposée
     private String apiKey = "AKIAIOSFODNN7EXAMPLE";
 }
+// Test Jenkins trigger - Tue Nov 11 15:01:57 UTC 2025
