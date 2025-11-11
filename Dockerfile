@@ -1,9 +1,7 @@
-FROM openjdk:8-jre-alpine
+FROM nginx:1.18
 
-# ❌ Image ancienne avec vulnérabilités
-COPY target/*.jar app.jar
-
-# ❌ Utilisateur root
+# Image avec vulnérabilités connues
 USER root
 
-ENTRYPOINT ["java", "-jar", "/app.jar"]
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]
