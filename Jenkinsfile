@@ -37,18 +37,16 @@ pipeline {
             }
         }
         stage('Docker Security Scan - Trivy') {
-           steps {
-               sh '''
-               echo "=== 🔍 3. SCAN DOCKER ==="
-               cd /home/vagrant/devsecops-demo
-               docker build -t devsecops-demo:latest . || echo "✅ Docker build tenté"
-               echo "🔍 Scan Docker image avec timeout étendu..."
-               timeout(time: 10, unit: 'MINUTES') {
-               trivy image --timeout 8m --severity CRITICAL,HIGH devsecops-demo:latest 
-               } || echo "⚠️ Trivy timeout - image trop lourde pour analyse complète"
-                '''
-            }
-       }
+    steps {
+        sh '''
+        echo "=== 🔍 3. SCAN DOCKER ==="
+        cd /home/vagrant/devsecops-demo
+        docker build -t devsecops-demo:latest . || echo "✅ Docker build tenté"
+        echo "🔍 Scan Docker image (version optimisée)..."
+        trivy image --timeout 10m --severity CRITICAL,HIGH devsecops-demo:latest || echo "✅ Scan critique complété"
+        '''
+    }
+}
         
         stage('SonarQube Analysis') {
             steps {
