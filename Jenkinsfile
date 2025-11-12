@@ -54,6 +54,7 @@ pipeline {
                 echo "=== 🔍 4. ANALYSE SONARQUBE ==="
                 cd /home/vagrant/devsecops-demo
                 mvn sonar:sonar -Dsonar.host.url=http://192.168.56.10:9000 -Dsonar.projectKey=devsecops-final -Dsonar.login=squ_1d4a6d0a21556a27cdbe5876f3ab90aaf1ec0a0f
+                '''
             }
         }
     }
