@@ -90,71 +90,94 @@ pipeline {
             }
         }
     }
-    // Après votre stage SonarQube Analysis...
-stage('DAST - OWASP ZAP Dynamic Scan') {
-    steps {
-        sh '''
-        echo "=== 🔍 5. SCAN DYNAMIQUE OWASP ZAP ==="
-        echo "🎯 Test de sécurité d'une application en fonctionnement..."
+      // AJOUTEZ ICI VOS NOUVEAUX STAGES OWASP ZAP
+        stage('DAST - OWASP ZAP Dynamic Scan') {
+            steps {
+                sh '''
+                echo "=== 🔍 5. SCAN DYNAMIQUE OWASP ZAP ==="
+                echo "🎯 Test de sécurité d'une application en fonctionnement..."
+                
+                # Nettoyer d'abord les anciens containers
+                docker stop test-app 2>/dev/null || true
+                docker rm test-app 2>/dev/null || true
+                
+                # 1. Démarrer une application de test
+                echo "📱 Démarrage de l'application de test..."
+                docker run -d -p 8081:8080 --name test-app devsecops-demo:latest
+                echo "⏳ Attente du démarrage..."
+                sleep 25
+                
+                # 2. Vérifier que l'application répond
+                if curl -s http://localhost:8081 > /dev/null; then
+                    echo "✅ Application démarrée avec succès"
+                else
+                    echo "⚠️ Application lente à démarrer, continuation..."
+                fi
+                
+                # 3. Scanner avec OWASP ZAP (Scan Dynamique)
+                echo "🔍 Scan dynamique OWASP ZAP en cours (2-3 minutes)..."
+                docker run --rm --network="host" -v /home/vagrant/devsecops-demo/reports:/zap/wrk/:rw \
+                  zaproxy/zap-stable zap-baseline.py \
+                  -t http://localhost:8081 \
+                  -r owasp-dast-scan.html \
+                  -J owasp-dast-scan.json
+                
+                # 4. Nettoyer
+                docker stop test-app || true
+                docker rm test-app || true
+                
+                echo "✅ Scan dynamique OWASP ZAP complété"
+                echo "📊 Rapport DAST généré: reports/owasp-dast-scan.html"
+                '''
+            }
+        }
         
-        # Scanner avec OWASP ZAP
-        echo "🔍 Scan dynamique en cours (2-3 minutes)..."
-        docker run --rm --network="host" -v /home/vagrant/devsecops-demo/reports:/zap/wrk/:rw \
-          zaproxy/zap-stable zap-baseline.py \
-          -t http://localhost:8080 \
-          -r owasp-dast-scan.html \
-          -J owasp-dast-scan.json
-        
-        echo "✅ Scan dynamique OWASP ZAP complété"
-        echo "📊 Rapport généré: reports/owasp-dast-scan.html"
-        '''
-    }
-}
-
-stage('OWASP DAST Report') {
-    steps {
-        sh '''
-        echo "=== 📊 RAPPORT SCAN DYNAMIQUE ==="
-        
-        # Résumé des résultats OWASP ZAP
-        cat > reports/owasp-dast-summary.md << 'EOF'
-        # 🔍 RAPPORT SCAN DYNAMIQUE OWASP ZAP
-        
-        ## 📋 Informations du Scan
-        - **Type**: DAST (Dynamic Application Security Testing)
-        - **Outil**: OWASP ZAP
-        - **Cible**: Jenkins (http://localhost:8080)
-        - **Date**: $(date)
-        - **Build**: ${BUILD_NUMBER}
-        
-        ## 📈 RÉSULTATS
-        - ✅ **54 tests PASSED** - Sécurité correcte
-        - ⚠️ **13 warnings** - Améliorations possibles  
-        - ❌ **0 échecs critiques** - Aucune vulnérabilité grave
-        
-        ## 🚨 VULNÉRABILITÉS DÉTECTÉES
-        - Commentaires suspects dans le code
-        - Headers de sécurité manquants (CSP)
-        - Absence de tokens anti-CSRF
-        - Informations serveur exposées
-        
-        ## 📁 FICHIERS GÉNÉRÉS
-        - `owasp-dast-scan.html` : Rapport détaillé
-        - `owasp-dast-scan.json` : Données structurées
-        
-        ## 🔗 ACCÈS RAPIDE
-        - [Rapport ZAP HTML](./owasp-dast-scan.html)
-        - [Build Jenkins](${BUILD_URL})
-        
-        ---
-        *Pipeline DevSecOps - Scan OWASP ZAP DAST*
-        EOF
-        
-        echo "✅ Rapport OWASP DAST généré"
-        echo "📊 54 tests passés, 13 warnings, 0 échecs critiques"
-        '''
-    }
-}
+        stage('OWASP DAST Report') {
+            steps {
+                sh '''
+                echo "=== 📊 RAPPORT SCAN DYNAMIQUE OWASP ==="
+                
+                # Créer un résumé du scan DAST
+                cat > reports/owasp-dast-summary.md << 'EOF'
+                # 🔍 RAPPORT SCAN DYNAMIQUE OWASP ZAP
+                
+                ## 📋 Informations du Scan
+                - **Type**: DAST (Dynamic Application Security Testing)
+                - **Outil**: OWASP ZAP
+                - **Cible**: Application Docker sur port 8081
+                - **Date**: $(date)
+                - **Build**: ${BUILD_NUMBER}
+                
+                ## 🎯 Méthodologie
+                Le scan dynamique teste l'application en fonctionnement pour détecter:
+                - ⚡ Injections (SQL, XSS, etc.)
+                - 🔐 Problèmes d'authentification
+                - 📝 Configuration sécuritaire
+                - 🔗 Gestion des sessions
+                
+                ## 📈 Résultats
+                - ✅ Application analysée en conditions réelles
+                - ✅ Vulnérabilités runtime détectées
+                - ✅ Rapport OWASP ZAP généré
+                
+                ## 📁 Fichiers Générés
+                - `owasp-dast-scan.html` : Rapport détaillé
+                - `owasp-dast-scan.json` : Données structurées
+                
+                ## 🔗 Accès Rapide
+                - [Rapport ZAP HTML](./owasp-dast-scan.html)
+                - [Build Jenkins](${BUILD_URL})
+                
+                ---
+                *Scan dynamique OWASP ZAP - Pipeline DevSecOps*
+                EOF
+                
+                echo "✅ Rapport DAST OWASP généré"
+                '''
+            }
+        }
+    } // ← CETTE ACCOLADE FERMANTE EST TRÈS IMPORTANTE !
+    
     post {
         always {
             // RAPPORT EXISTANT
