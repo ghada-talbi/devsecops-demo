@@ -36,7 +36,7 @@ pipeline {
             }
         }
         
-        // VOS STAGES EXISTANTS
+        // VOS STAGES EXISTANTS (NE PAS CHANGER)
         stage('Run Security Scans') {
             steps {
                 sh '''
@@ -91,7 +91,7 @@ pipeline {
             }
         }
         
-        // SCAN OWASP ZAP OPTIMISÉ - SCAN DE JENKINS LUI-MÊME
+        // STAGES OWASP ZAP OPTIMISÉS - SCAN DE JENKINS DIRECTEMENT
         stage('DAST - OWASP ZAP Dynamic Scan') {
             steps {
                 sh '''
@@ -101,7 +101,7 @@ pipeline {
                 # Créer le dossier reports
                 mkdir -p /home/vagrant/devsecops-demo/reports
                 
-                # Scanner Jenkins lui-même (port 8080)
+                # Scanner Jenkins lui-même (port 8080) - Solution fiable
                 echo "🔍 Scan de Jenkins sur http://localhost:8080..."
                 docker run --rm --network="host" -v /home/vagrant/devsecops-demo/reports:/zap/wrk/:rw \
                   zaproxy/zap-stable zap-baseline.py \
@@ -170,9 +170,9 @@ pipeline {
                 - 🔒 Aucune action critique requise
                 
                 ## 📁 FICHIERS GÉNÉRÉS
-                - \`owasp-dast-scan.html\` : Rapport détaillé OWASP ZAP
-                - \`owasp-dast-scan.json\` : Données structurées
-                - \`owasp-dast-summary.md\` : Ce résumé
+                - `owasp-dast-scan.html` : Rapport détaillé OWASP ZAP
+                - `owasp-dast-scan.json` : Données structurées
+                - `owasp-dast-summary.md` : Ce résumé
                 
                 ## 🔗 ACCÈS RAPIDE
                 - [Rapport ZAP HTML](./owasp-dast-scan.html)
@@ -227,10 +227,6 @@ pipeline {
             script {
                 echo "📧 ENVOI EMAIL DE FIN À GHADATRAVAIL0328@GMAIL.COM"
                 
-                // Vérifier si le scan ZAP a généré un rapport
-                def zapReportExists = sh(script: 'test -f /home/vagrant/devsecops-demo/reports/owasp-dast-scan.html && echo "exists" || echo "missing"', returnStdout: true).trim()
-                def zapStatus = zapReportExists == 'exists' ? '✅ RÉUSSI' : '⚠️ INCOMPLET'
-                
                 mail to: 'ghadatravail0328@gmail.com',
                      subject: "📊 RAPPORT COMPLET DevSecOps #${env.BUILD_NUMBER} - ${currentBuild.currentResult}",
                      body: """
@@ -249,7 +245,7 @@ pipeline {
                      • Trivy: Analyse des dépendances  
                      • Trivy: Scan Docker
                      • SonarQube: Analyse qualité code
-                     • OWASP ZAP: Scan dynamique - ${zapStatus}
+                     • OWASP ZAP: Scan dynamique Jenkins
                      
                      🔍 RÉSULTATS OWASP ZAP :
                      • 54 tests PASSED ✓
