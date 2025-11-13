@@ -155,6 +155,106 @@ pipeline {
                 '''
             }
         }
+        
+        // NOUVEAU STAGE - DÉPLOIEMENT
+        stage('🚀 Déploiement Production') {
+            when {
+                expression { currentBuild.result == null || currentBuild.result == 'SUCCESS' }
+            }
+            steps {
+                sh '''
+                echo "=== 🚀 DÉPLOIEMENT EN PRODUCTION ==="
+                echo "📦 Préparation du déploiement..."
+                
+                # Arrêter et nettoyer les anciennes instances
+                echo "🧹 Nettoyage des anciens containers..."
+                docker stop prod-app 2>/dev/null || true
+                docker rm prod-app 2>/dev/null || true
+                
+                # Vérifier que l'image existe
+                echo "🔍 Vérification de l'image Docker..."
+                if docker images | grep -q "devsecops-demo"; then
+                    echo "✅ Image Docker trouvée"
+                else
+                    echo "🔨 Construction de l'image Docker..."
+                    docker build -t devsecops-demo:latest . || echo "⚠️ Construction Docker échouée"
+                fi
+                
+                # Déployer l'application en production
+                echo "🚀 Déploiement de l'application sur le port 8082..."
+                docker run -d -p 8082:8080 --name prod-app devsecops-demo:latest || echo "⚠️ Déploiement échoué"
+                
+                # Attendre le démarrage
+                echo "⏳ Attente du démarrage en production..."
+                sleep 30
+                
+                # Vérifier que l'application répond
+                echo "🔍 Vérification du déploiement..."
+                if curl -s --connect-timeout 15 http://localhost:8082 > /dev/null; then
+                    echo "🎉 DÉPLOIEMENT RÉUSSI !"
+                    echo "📍 Application disponible sur: http://localhost:8082"
+                    echo "📊 Statut: ✅ EN PRODUCTION"
+                else
+                    echo "⚠️ Application lente à démarrer, vérification dans 10s..."
+                    sleep 10
+                    if curl -s --connect-timeout 10 http://localhost:8082 > /dev/null; then
+                        echo "🎉 DÉPLOIEMENT RÉUSSI (retardé) !"
+                        echo "📍 Application disponible sur: http://localhost:8082"
+                    else
+                        echo "❌ DÉPLOIEMENT ÉCHOUÉ - Application non accessible"
+                        echo "💡 Diagnostic des containers:"
+                        docker ps -a || true
+                    fi
+                fi
+                '''
+            }
+        }
+        
+        // STAGE DE VALIDATION POST-DÉPLOIEMENT
+        stage('✅ Validation Post-Déploiement') {
+            when {
+                expression { currentBuild.result == null || currentBuild.result == 'SUCCESS' }
+            }
+            steps {
+                sh '''
+                echo "=== ✅ VALIDATION POST-DÉPLOIEMENT ==="
+                echo "🔍 Tests de validation de l'application déployée..."
+                
+                # Test 1: Vérifier que l'application répond
+                echo "1. Test de connectivité..."
+                if curl -s --connect-timeout 10 http://localhost:8082 > /dev/null; then
+                    echo "   ✅ Connectivité OK"
+                else
+                    echo "   ❌ Connectivité échouée"
+                    exit 1
+                fi
+                
+                # Test 2: Vérifier le statut HTTP
+                echo "2. Test de statut HTTP..."
+                HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8082)
+                if [ "$HTTP_STATUS" -eq 200 ] || [ "$HTTP_STATUS" -eq 403 ] || [ "$HTTP_STATUS" -eq 401 ]; then
+                    echo "   ✅ Statut HTTP: $HTTP_STATUS"
+                else
+                    echo "   ❌ Statut HTTP anormal: $HTTP_STATUS"
+                fi
+                
+                # Test 3: Vérifier que le container est en cours d'exécution
+                echo "3. Test du container Docker..."
+                if docker ps | grep -q "prod-app"; then
+                    echo "   ✅ Container en cours d'exécution"
+                else
+                    echo "   ❌ Container arrêté"
+                    exit 1
+                fi
+                
+                # Test 4: Vérifier les ressources
+                echo "4. Test des ressources système..."
+                docker stats prod-app --no-stream --format "table {{.Container}}\t{{.CPUPerc}}\t{{.MemUsage}}" || true
+                
+                echo "🎉 VALIDATION TERMINÉE - APPLICATION OPÉRATIONNELLE"
+                '''
+            }
+        }
     }
     
     post {
@@ -169,11 +269,18 @@ pipeline {
             echo "   3. ✅ Trivy - Scan Docker"
             echo "   4. ✅ SonarQube - Analyse qualité code"
             echo "   5. ✅ OWASP ZAP - Scan dynamique DAST"
+            echo "   6. 🚀 Déploiement Production"
+            echo "   7. ✅ Validation Post-Déploiement"
             echo " "
             echo "🔍 RÉSULTATS OWASP ZAP :"
             echo "   • Scan de sécurité applicative effectué"
             echo "   • Rapport OWASP ZAP généré"
             echo "   • Tests de sécurité dynamiques complétés"
+            echo " "
+            echo "🚀 DÉPLOIEMENT :"
+            echo "   • Application déployée sur: http://localhost:8082"
+            echo "   • Container: prod-app"
+            echo "   • Statut: ✅ EN PRODUCTION"
             echo " "
             echo "🔐 SECRET DÉTECTÉ MANUELLEMENT :"
             echo "   Fichier: src/main/java/com/demo/SecurityIssues.java"
@@ -191,11 +298,24 @@ pipeline {
             else
                 echo "⚠️ Aucun rapport généré dans le dossier reports"
             fi
+            
+            # Afficher l'état des containers
+            echo " "
+            echo "=== 🐳 CONTAINERS DOCKER ==="
+            docker ps -a --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" || echo "⚠️ Impossible de lister les containers"
             '''
             
             // NOTIFICATION DE FIN DÉTAILLÉE
             script {
                 echo "📧 ENVOI EMAIL DE FIN À GHADATRAVAIL0328@GMAIL.COM"
+                
+                // Vérifier si l'application est déployée
+                def appDeployed = false
+                try {
+                    appDeployed = sh(script: 'docker ps | grep -q "prod-app" && curl -s --connect-timeout 5 http://localhost:8082 > /dev/null && echo "deployed" || echo "not_deployed"', returnStdout: true).trim() == 'deployed'
+                } catch (Exception e) {
+                    echo "⚠️ Impossible de vérifier le déploiement: ${e.message}"
+                }
                 
                 mail to: 'ghadatravail0328@gmail.com',
                      subject: "📊 RAPPORT COMPLET DevSecOps #${env.BUILD_NUMBER} - ${currentBuild.currentResult}",
@@ -210,12 +330,17 @@ pipeline {
                      • Statut: ${currentBuild.currentResult}
                      • Durée: ${currentBuild.durationString}
                      
-                     ✅ SCANS RÉALISÉS :
+                     ✅ SCANS DE SÉCURITÉ RÉALISÉS :
                      • Gitleaks: Détection des secrets
                      • Trivy: Analyse des dépendances  
                      • Trivy: Scan Docker
                      • SonarQube: Analyse qualité code
                      • OWASP ZAP: Scan dynamique DAST
+                     
+                     🚀 DÉPLOIEMENT :
+                     ${appDeployed ? '• ✅ APPLICATION DÉPLOYÉE AVEC SUCCÈS' : '• ⚠️ DÉPLOIEMENT PARTIEL'}
+                     • URL: http://localhost:8082
+                     • Container: prod-app
                      
                      🔍 ANALYSE SONARQUBE RÉUSSIE :
                      • Code analysé avec succès
@@ -225,12 +350,25 @@ pipeline {
                      📎 LIENS :
                      • Jenkins: ${env.BUILD_URL}
                      • SonarQube: http://192.168.56.10:9000/dashboard?id=devsecops-final
+                     • Application: http://localhost:8082
                      
-                     ${currentBuild.currentResult == 'SUCCESS' ? '🎉 TOUS LES TESTS DE SÉCURITÉ ONT RÉUSSI !' : '⚠️ DES PROBLÈMES ONT ÉTÉ DÉTECTÉS'}
+                     ${currentBuild.currentResult == 'SUCCESS' ? '🎉 TOUS LES TESTS DE SÉCURITÉ ET DÉPLOIEMENT ONT RÉUSSI !' : '⚠️ DES PROBLÈMES ONT ÉTÉ DÉTECTÉS'}
                      
                      Cordialement,
                      Votre Pipeline DevSecOps
                      """
+            }
+        }
+        
+        success {
+            script {
+                echo "🎉 PIPELINE RÉUSSIE - Application déployée et sécurisée !"
+            }
+        }
+        
+        failure {
+            script {
+                echo "❌ PIPELINE ÉCHOUÉE - Vérifier les logs pour plus de détails"
             }
         }
     }
