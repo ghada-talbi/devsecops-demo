@@ -2,6 +2,40 @@ pipeline {
     agent any
     
     stages {
+        // NOTIFICATION DE DÉMARRAGE
+        stage('📧 Notification Démarrage') {
+            steps {
+                script {
+                    echo "🚀 ENVOI EMAIL DE DÉMARRAGE À GHADATRAVAIL0328@GMAIL.COM"
+                    
+                    mail to: 'ghadatravail0328@gmail.com',
+                         subject: "🚀 DÉMARRAGE Build DevSecOps #${env.BUILD_NUMBER}",
+                         body: """
+                         BONJOUR,
+                         
+                         VOTRE PIPELINE DEVSECOPS VIENT DE DÉMARRER !
+                         
+                         📋 DÉTAILS :
+                         • Projet: ${env.JOB_NAME}
+                         • Build: #${env.BUILD_NUMBER} 
+                         • Heure: ${new Date()}
+                         
+                         🔒 SCANS DE SÉCURITÉ EN COURS :
+                         ✅ Détection des secrets (Gitleaks)
+                         ✅ Analyse des dépendances (Trivy)
+                         ✅ Scan Docker (Trivy)
+                         ✅ Analyse qualité code (SonarQube)
+                         
+                         📎 LIEN : ${env.BUILD_URL}
+                         
+                         Cordialement,
+                         Votre Pipeline DevSecOps
+                         """
+                }
+            }
+        }
+        
+        // VOS STAGES EXISTANTS (NE PAS CHANGER)
         stage('Run Security Scans') {
             steps {
                 sh '''
@@ -18,11 +52,8 @@ pipeline {
                 sh '''
                 echo "=== 🔍 1. DÉTECTION DES SECRETS ==="
                 cd /home/vagrant/devsecops-demo
-                # Forcer l'ajout du safe directory
                 git config --global --add safe.directory /home/vagrant/devsecops-demo || true
-                # Essayer Gitleaks même si ça échoue
                 gitleaks detect --source . --verbose || echo "⚠️ Gitleaks a échoué mais continue..."
-                echo "🔍 TEST MANUEL: La clé AWS AKIAIOSFODNN7EXAMPLE est dans SecurityIssues.java ligne 35"
                 '''
             }
         }
@@ -36,17 +67,18 @@ pipeline {
                 '''
             }
         }
+        
         stage('Docker Security Scan - Trivy') {
-    steps {
-        sh '''
-        echo "=== 🔍 3. SCAN DOCKER ==="
-        cd /home/vagrant/devsecops-demo
-        docker build -t devsecops-demo:latest . || echo "✅ Docker build tenté"
-        echo "🔍 Scan Docker image (version optimisée)..."
-        trivy image --timeout 10m --severity CRITICAL,HIGH devsecops-demo:latest || echo "✅ Scan critique complété"
-        '''
-    }
-}
+            steps {
+                sh '''
+                echo "=== 🔍 3. SCAN DOCKER ==="
+                cd /home/vagrant/devsecops-demo
+                docker build -t devsecops-demo:latest . || echo "✅ Docker build tenté"
+                echo "🔍 Scan Docker image (version optimisée)..."
+                trivy image --timeout 10m --severity CRITICAL,HIGH devsecops-demo:latest || echo "✅ Scan critique complété"
+                '''
+            }
+        }
         
         stage('SonarQube Analysis') {
             steps {
@@ -61,6 +93,7 @@ pipeline {
     
     post {
         always {
+            // RAPPORT EXISTANT
             sh '''
             echo " "
             echo "=== 🎉 RAPPORT DEVSECOPS ==="
@@ -76,6 +109,40 @@ pipeline {
             echo " "
             echo "🚀 PLATEFORME DEVSECOPS VALIDÉE !"
             '''
+            
+            // NOTIFICATION DE FIN
+            script {
+                echo "📧 ENVOI EMAIL DE FIN À GHADATRAVAIL0328@GMAIL.COM"
+                
+                mail to: 'ghadatravail0328@gmail.com',
+                     subject: "📊 RAPPORT Build DevSecOps #${env.BUILD_NUMBER} - ${currentBuild.currentResult}",
+                     body: """
+                     BONJOUR,
+                     
+                     VOTRE PIPELINE DEVSECOPS EST TERMINÉ !
+                     
+                     📋 RÉSULTATS :
+                     • Projet: ${env.JOB_NAME}
+                     • Build: #${env.BUILD_NUMBER}
+                     • Statut: ${currentBuild.currentResult}
+                     • Durée: ${currentBuild.durationString}
+                     
+                     ✅ SCANS RÉALISÉS :
+                     • Gitleaks: Détection des secrets
+                     • Trivy: Analyse des dépendances  
+                     • Trivy: Scan Docker
+                     • SonarQube: Analyse qualité code
+                     
+                     📎 LIENS :
+                     • Jenkins: ${env.BUILD_URL}
+                     • SonarQube: http://192.168.56.10:9000
+                     
+                     ${currentBuild.currentResult == 'SUCCESS' ? '🎉 TOUS LES TESTS DE SÉCURITÉ ONT RÉUSSI !' : '⚠️ DES PROBLÈMES ONT ÉTÉ DÉTECTÉS'}
+                     
+                     Cordialement,
+                     Votre Pipeline DevSecOps
+                     """
+            }
         }
     }
 }
