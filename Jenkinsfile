@@ -90,7 +90,35 @@ pipeline {
             }
         }
     }
-    
+    // Ajouter après le stage SonarQube
+stage('DAST - OWASP ZAP Scan') {
+    steps {
+        sh '''
+        echo "=== 🔍 5. SCAN DYNAMIQUE OWASP ZAP ==="
+        echo "📱 Test de l'application en fonctionnement..."
+        
+        # Lancer et scanner l'application
+        cd /home/vagrant/devsecops-demo
+        
+        # 1. Démarrer l'application
+        docker run -d -p 8080:8080 --name test-app devsecops-demo:latest
+        sleep 15  # Attendre le démarrage
+        
+        # 2. Scanner avec ZAP
+        docker run --rm -v $(pwd)/reports:/zap/wrk/:rw -t owasp/zap2docker-stable zap-baseline.py \
+          -t http://host.docker.internal:8080 \
+          -g gen.conf \
+          -r zap-scan-report.html \
+          -w zap-scan-report.md
+        
+        # 3. Nettoyer
+        docker stop test-app || true
+        docker rm test-app || true
+        
+        echo "✅ Scan dynamique DAST complété"
+        '''
+    }
+}
     post {
         always {
             // RAPPORT EXISTANT
