@@ -90,7 +90,7 @@ pipeline {
             }
         }
         
-        // AJOUTEZ ICI VOS NOUVEAUX STAGES OWASP ZAP
+        // STAGE OWASP ZAP SEULEMENT - SANS RAPPORT
         stage('DAST - OWASP ZAP Dynamic Scan') {
             steps {
                 sh '''
@@ -131,8 +131,8 @@ pipeline {
                 '''
             }
         }
-        
- 
+    }
+    
     post {
         always {
             // RAPPORT EXISTANT
@@ -187,4 +187,4 @@ pipeline {
             }
         }
     }
-} // ← CETTE ACCOLADE FERME LE BLOC "pipeline"
+}
