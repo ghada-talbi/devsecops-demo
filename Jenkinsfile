@@ -132,52 +132,7 @@ pipeline {
             }
         }
         
-        stage('OWASP DAST Report') {
-            steps {
-                sh '''
-                echo "=== 📊 RAPPORT SCAN DYNAMIQUE OWASP ==="
-                
-                # Créer un résumé du scan DAST
-                cat > reports/owasp-dast-summary.md << 'EOF'
-                # 🔍 RAPPORT SCAN DYNAMIQUE OWASP ZAP
-                
-                ## 📋 Informations du Scan
-                - **Type**: DAST (Dynamic Application Security Testing)
-                - **Outil**: OWASP ZAP
-                - **Cible**: Application Docker sur port 8080
-                - **Date**: $(date)
-                - **Build**: ${BUILD_NUMBER}
-                
-                ## 🎯 Méthodologie
-                Le scan dynamique teste l'application en fonctionnement pour détecter:
-                - ⚡ Injections (SQL, XSS, etc.)
-                - 🔐 Problèmes d'authentification
-                - 📝 Configuration sécuritaire
-                - 🔗 Gestion des sessions
-                
-                ## 📈 Résultats
-                - ✅ Application analysée en conditions réelles
-                - ✅ Vulnérabilités runtime détectées
-                - ✅ Rapport OWASP ZAP généré
-                
-                ## 📁 Fichiers Générés
-                - `owasp-dast-scan.html` : Rapport détaillé
-                - `owasp-dast-scan.json` : Données structurées
-                
-                ## 🔗 Accès Rapide
-                - [Rapport ZAP HTML](./owasp-dast-scan.html)
-                - [Build Jenkins](${BUILD_URL})
-                
-                ---
-                *Scan dynamique OWASP ZAP - Pipeline DevSecOps*
-                EOF
-                
-                echo "✅ Rapport DAST OWASP généré"
-                '''
-            }
-        }
-    } // ← CETTE ACCOLADE FERME LE BLOC "stages"
-    
+ 
     post {
         always {
             // RAPPORT EXISTANT
