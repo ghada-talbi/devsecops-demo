@@ -89,8 +89,8 @@ pipeline {
                 '''
             }
         }
-    }
-      // AJOUTEZ ICI VOS NOUVEAUX STAGES OWASP ZAP
+        
+        // AJOUTEZ ICI VOS NOUVEAUX STAGES OWASP ZAP
         stage('DAST - OWASP ZAP Dynamic Scan') {
             steps {
                 sh '''
@@ -176,7 +176,7 @@ pipeline {
                 '''
             }
         }
-    } // ← CETTE ACCOLADE FERMANTE EST TRÈS IMPORTANTE !
+    } // ← CETTE ACCOLADE FERME LE BLOC "stages"
     
     post {
         always {
@@ -232,4 +232,4 @@ pipeline {
             }
         }
     }
-}
+} // ← CETTE ACCOLADE FERME LE BLOC "pipeline"
