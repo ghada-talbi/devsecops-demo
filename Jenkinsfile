@@ -91,7 +91,7 @@ pipeline {
             }
         }
         
-        // STAGE OWASP ZAP CORRIGÉ - UTILISATION DU PORT 8081
+        // STAGE OWASP ZAP CORRIGÉ - TEST DE NGINX SUR LE PORT 80
         stage('DAST - OWASP ZAP Dynamic Scan') {
             steps {
                 sh '''
@@ -102,18 +102,18 @@ pipeline {
                 docker stop test-app 2>/dev/null || true
                 docker rm test-app 2>/dev/null || true
                 
-                # 1. Démarrer une application de test sur le port 8081 (évite conflit avec Jenkins sur 8080)
-                echo "📱 Démarrage de l'application de test sur le port 8081..."
-                docker run -d -p 8081:8080 --name test-app devsecops-demo:latest || echo "⚠️ Démarrage Docker échoué, continuation..."
+                # 1. Démarrer Nginx sur le port 8081 (évite conflit avec Jenkins sur 8080)
+                echo "📱 Démarrage de Nginx sur le port 8081..."
+                docker run -d -p 8081:80 --name test-app devsecops-demo:latest || echo "⚠️ Démarrage Docker échoué, continuation..."
                 
                 # 2. Attendre le démarrage
-                echo "⏳ Attente du démarrage de l'application..."
-                sleep 30
+                echo "⏳ Attente du démarrage de Nginx..."
+                sleep 10
                 
-                # 3. Vérifier que l'application répond sur le port 8081
-                echo "🔍 Vérification de l'accessibilité de l'application..."
+                # 3. Vérifier que Nginx répond sur le port 8081
+                echo "🔍 Vérification de l'accessibilité de Nginx..."
                 if curl -s --connect-timeout 10 http://localhost:8081 > /dev/null; then
-                    echo "✅ Application démarrée avec succès sur le port 8081"
+                    echo "✅ Nginx démarré avec succès sur le port 8081"
                     
                     # 4. Scanner avec OWASP ZAP sur le port 8081
                     echo "🔍 Scan dynamique OWASP ZAP en cours (2-3 minutes)..."
@@ -131,7 +131,7 @@ pipeline {
                     echo "✅ Scan dynamique OWASP ZAP complété avec succès"
                     echo "📊 Rapport généré: reports/owasp-dast-scan.html"
                 else
-                    echo "❌ Application non accessible sur le port 8081 - Scan ZAP ignoré"
+                    echo "❌ Nginx non accessible sur le port 8081 - Scan ZAP ignoré"
                     echo "💡 Vérification des containers Docker en cours d'exécution:"
                     docker ps -a || true
                     echo "💡 Tentative alternative: scan de Jenkins lui-même sur le port 8080..."
@@ -156,15 +156,15 @@ pipeline {
             }
         }
         
-        // NOUVEAU STAGE - DÉPLOIEMENT
-        stage('🚀 Déploiement Production') {
+        // NOUVEAU STAGE - DÉPLOIEMENT NGINX
+        stage('🚀 Déploiement Nginx Production') {
             when {
                 expression { currentBuild.result == null || currentBuild.result == 'SUCCESS' }
             }
             steps {
                 sh '''
-                echo "=== 🚀 DÉPLOIEMENT EN PRODUCTION ==="
-                echo "📦 Préparation du déploiement..."
+                echo "=== 🚀 DÉPLOIEMENT NGINX EN PRODUCTION ==="
+                echo "📦 Préparation du déploiement Nginx..."
                 
                 # Arrêter et nettoyer les anciennes instances
                 echo "🧹 Nettoyage des anciens containers..."
@@ -177,81 +177,89 @@ pipeline {
                     echo "✅ Image Docker trouvée"
                 else
                     echo "🔨 Construction de l'image Docker..."
-                    docker build -t devsecops-demo:latest . || echo "⚠️ Construction Docker échouée"
+                    docker build -t devsecops-demo:latest . || { echo "❌ Échec de la construction Docker"; exit 1; }
                 fi
                 
-                # Déployer l'application en production
-                echo "🚀 Déploiement de l'application sur le port 8082..."
-                docker run -d -p 8082:8080 --name prod-app devsecops-demo:latest || echo "⚠️ Déploiement échoué"
+                # Déployer Nginx en production sur le port 8082
+                echo "🚀 Déploiement de Nginx sur le port 8082..."
+                docker run -d -p 8082:80 --name prod-app devsecops-demo:latest || { echo "❌ Déploiement échoué"; exit 1; }
                 
-                # Attendre le démarrage
-                echo "⏳ Attente du démarrage en production..."
-                sleep 30
+                # Attendre le démarrage (Nginx démarre rapidement)
+                echo "⏳ Attente du démarrage de Nginx..."
+                sleep 10
                 
-                # Vérifier que l'application répond
+                # Vérifier que Nginx répond
                 echo "🔍 Vérification du déploiement..."
-                if curl -s --connect-timeout 15 http://localhost:8082 > /dev/null; then
-                    echo "🎉 DÉPLOIEMENT RÉUSSI !"
-                    echo "📍 Application disponible sur: http://localhost:8082"
+                if curl -s --connect-timeout 10 http://localhost:8082 > /dev/null; then
+                    echo "🎉 DÉPLOIEMENT NGINX RÉUSSI !"
+                    echo "📍 Nginx disponible sur: http://localhost:8082"
                     echo "📊 Statut: ✅ EN PRODUCTION"
+                    
+                    # Afficher la page par défaut de Nginx
+                    echo "📄 Contenu de la page Nginx:"
+                    curl -s http://localhost:8082 | head -20 || echo "⚠️ Impossible d'afficher le contenu"
                 else
-                    echo "⚠️ Application lente à démarrer, vérification dans 10s..."
-                    sleep 10
-                    if curl -s --connect-timeout 10 http://localhost:8082 > /dev/null; then
-                        echo "🎉 DÉPLOIEMENT RÉUSSI (retardé) !"
-                        echo "📍 Application disponible sur: http://localhost:8082"
-                    else
-                        echo "❌ DÉPLOIEMENT ÉCHOUÉ - Application non accessible"
-                        echo "💡 Diagnostic des containers:"
-                        docker ps -a || true
-                    fi
+                    echo "❌ DÉPLOIEMENT ÉCHOUÉ - Nginx non accessible"
+                    echo "💡 Diagnostic des containers:"
+                    docker ps -a || true
+                    echo "💡 Logs du container:"
+                    docker logs prod-app || true
+                    exit 1
                 fi
                 '''
             }
         }
         
-        // STAGE DE VALIDATION POST-DÉPLOIEMENT
-        stage('✅ Validation Post-Déploiement') {
+        // STAGE DE VALIDATION POST-DÉPLOIEMENT NGINX
+        stage('✅ Validation Post-Déploiement Nginx') {
             when {
                 expression { currentBuild.result == null || currentBuild.result == 'SUCCESS' }
             }
             steps {
                 sh '''
-                echo "=== ✅ VALIDATION POST-DÉPLOIEMENT ==="
-                echo "🔍 Tests de validation de l'application déployée..."
+                echo "=== ✅ VALIDATION POST-DÉPLOIEMENT NGINX ==="
+                echo "🔍 Tests de validation de Nginx déployé..."
                 
-                # Test 1: Vérifier que l'application répond
-                echo "1. Test de connectivité..."
+                # Test 1: Vérifier que Nginx répond
+                echo "1. Test de connectivité Nginx..."
                 if curl -s --connect-timeout 10 http://localhost:8082 > /dev/null; then
-                    echo "   ✅ Connectivité OK"
+                    echo "   ✅ Connectivité Nginx OK"
                 else
-                    echo "   ❌ Connectivité échouée"
+                    echo "   ❌ Connectivité Nginx échouée"
                     exit 1
                 fi
                 
                 # Test 2: Vérifier le statut HTTP
-                echo "2. Test de statut HTTP..."
+                echo "2. Test de statut HTTP Nginx..."
                 HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8082)
-                if [ "$HTTP_STATUS" -eq 200 ] || [ "$HTTP_STATUS" -eq 403 ] || [ "$HTTP_STATUS" -eq 401 ]; then
-                    echo "   ✅ Statut HTTP: $HTTP_STATUS"
+                if [ "$HTTP_STATUS" -eq 200 ]; then
+                    echo "   ✅ Statut HTTP Nginx: $HTTP_STATUS (OK)"
                 else
-                    echo "   ❌ Statut HTTP anormal: $HTTP_STATUS"
+                    echo "   ⚠️ Statut HTTP Nginx: $HTTP_STATUS (Attendu: 200)"
                 fi
                 
                 # Test 3: Vérifier que le container est en cours d'exécution
                 echo "3. Test du container Docker..."
                 if docker ps | grep -q "prod-app"; then
-                    echo "   ✅ Container en cours d'exécution"
+                    echo "   ✅ Container Nginx en cours d'exécution"
                 else
-                    echo "   ❌ Container arrêté"
+                    echo "   ❌ Container Nginx arrêté"
                     exit 1
                 fi
                 
-                # Test 4: Vérifier les ressources
-                echo "4. Test des ressources système..."
+                # Test 4: Vérifier le contenu de la page
+                echo "4. Test du contenu Nginx..."
+                if curl -s http://localhost:8082 | grep -q "Welcome to nginx"; then
+                    echo "   ✅ Contenu Nginx correct"
+                else
+                    echo "   ⚠️ Contenu Nginx différent de celui attendu"
+                fi
+                
+                # Test 5: Vérifier les ressources
+                echo "5. Test des ressources système..."
                 docker stats prod-app --no-stream --format "table {{.Container}}\t{{.CPUPerc}}\t{{.MemUsage}}" || true
                 
-                echo "🎉 VALIDATION TERMINÉE - APPLICATION OPÉRATIONNELLE"
+                echo "🎉 VALIDATION TERMINÉE - NGINX OPÉRATIONNEL"
                 '''
             }
         }
@@ -269,7 +277,7 @@ pipeline {
             echo "   3. ✅ Trivy - Scan Docker"
             echo "   4. ✅ SonarQube - Analyse qualité code"
             echo "   5. ✅ OWASP ZAP - Scan dynamique DAST"
-            echo "   6. 🚀 Déploiement Production"
+            echo "   6. 🚀 Déploiement Nginx Production"
             echo "   7. ✅ Validation Post-Déploiement"
             echo " "
             echo "🔍 RÉSULTATS OWASP ZAP :"
@@ -277,9 +285,10 @@ pipeline {
             echo "   • Rapport OWASP ZAP généré"
             echo "   • Tests de sécurité dynamiques complétés"
             echo " "
-            echo "🚀 DÉPLOIEMENT :"
-            echo "   • Application déployée sur: http://localhost:8082"
+            echo "🚀 DÉPLOIEMENT NGINX :"
+            echo "   • Nginx déployé sur: http://localhost:8082"
             echo "   • Container: prod-app"
+            echo "   • Port: 80 (container) → 8082 (host)"
             echo "   • Statut: ✅ EN PRODUCTION"
             echo " "
             echo "🔐 SECRET DÉTECTÉ MANUELLEMENT :"
@@ -290,7 +299,7 @@ pipeline {
             
             # Vérifier et lister les rapports générés
             echo " "
-            echo "=== 📁 RAPPORTS GÉNÉRÉS ==="
+            echo "=== 📁 RAPPORTS GÉNÉRÉRÉS ==="
             cd /home/vagrant/devsecops-demo
             if [ -d "reports" ]; then
                 echo "📂 Contenu du dossier reports:"
@@ -304,7 +313,6 @@ pipeline {
             echo "=== 🐳 CONTAINERS DOCKER ==="
             docker ps -a --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" || echo "⚠️ Impossible de lister les containers"
             '''
-            
             // NOTIFICATION DE FIN DÉTAILLÉE
             script {
                 echo "📧 ENVOI EMAIL DE FIN À GHADATRAVAIL0328@GMAIL.COM"
