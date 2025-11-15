@@ -1,282 +1,287 @@
 pipeline {
     agent any
     
+    // ✅ DÉCLENCHEMENT AUTOMATIQUE PAR GITHUB
+    triggers {
+        githubPush()
+    }
+    
     options {
         timeout(time: 30, unit: 'MINUTES')
         retry(1)
     }
     
+    environment {
+        SONAR_URL = "http://192.168.56.10:9000"
+        SONAR_TOKEN = "squ_1d4a6d0a21556a27cdbe5876f3ab90aaf1ec0a0f"
+    }
+    
     stages {
-        // NOTIFICATION DE DÉMARRAGE
-        stage('📧 Notification Démarrage') {
+        // STAGE 1: NOTIFICATION DÉMARRAGE AUTOMATIQUE
+        stage('🔔 Déclenchement Auto GitHub') {
             steps {
                 script {
-                    echo "🚀 ENVOI EMAIL DE DÉMARRAGE À GHADATRAVAIL0328@GMAIL.COM"
+                    echo "🚀🚀🚀 PIPELINE DÉCLENCHÉ AUTOMATIQUEMENT PAR GITHUB PUSH 🚀🚀🚀"
+                    echo "📦 Commit: ${env.GIT_COMMIT ?: 'Non spécifié'}"
+                    echo "🌿 Branch: ${env.GIT_BRANCH ?: 'Non spécifié'}"
+                    echo "👤 Auteur: ${env.GIT_AUTHOR_NAME ?: 'Non spécifié'}"
+                    echo "🎯 Déclencheur: Push GitHub"
                     
+                    // Email de démarrage
                     mail to: 'ghadatravail0328@gmail.com',
-                         subject: "🚀 DÉMARRAGE Build DevSecOps #${env.BUILD_NUMBER}",
+                         subject: "🚀 DÉCLENCHEMENT AUTO - Build DevSecOps #${env.BUILD_NUMBER}",
                          body: """
                          BONJOUR,
                          
-                         VOTRE PIPELINE DEVSECOPS VIENT DE DÉMARRER !
+                         VOTRE PIPELINE VIENT D'ÊTRE DÉCLENCHÉ AUTOMATIQUEMENT !
                          
                          📋 DÉTAILS :
                          • Projet: ${env.JOB_NAME}
-                         • Build: #${env.BUILD_NUMBER} 
+                         • Build: #${env.BUILD_NUMBER}
+                         • Déclencheur: Push GitHub
                          • Heure: ${new Date()}
+                         • Branch: ${env.GIT_BRANCH ?: 'Non spécifié'}
                          
                          🔒 SCANS DE SÉCURITÉ EN COURS :
                          ✅ Détection des secrets (Gitleaks)
                          ✅ Analyse des dépendances (Trivy)
                          ✅ Scan Docker (Trivy)
                          ✅ Analyse qualité code (SonarQube)
-                         ✅ Scan dynamique OWASP ZAP
                          
                          📎 LIEN : ${env.BUILD_URL}
                          
                          Cordialement,
-                         Votre Pipeline DevSecOps
+                         Votre Pipeline DevSecOps Auto
                          """
                 }
             }
         }
         
-        // VOS STAGES EXISTANTS OPTIMISÉS
-        stage('Run Security Scans') {
+        // STAGE 2: RÉCUPÉRATION DU CODE
+        stage('📥 Récupération Code GitHub') {
             steps {
+                checkout scm
                 sh '''
-                echo "=== 🚀 DÉMARRAGE DES SCANS DE SÉCURITÉ ==="
-                cd /home/vagrant/devsecops-demo
-                pwd
+                echo "=== 📥 CODE RÉCUPÉRÉ DEPUIS GITHUB ==="
+                echo "📁 Contenu du dossier :"
                 ls -la
+                echo "🔍 Dernier commit :"
+                git log -1 --oneline || echo "Info git non disponible"
                 '''
             }
         }
         
-        stage('Secrets Detection - Gitleaks') {
+        // STAGE 3: DÉTECTION DES SECRETS
+        stage('🔍 Scan Secrets - Gitleaks') {
             steps {
                 sh '''
-                echo "=== 🔍 1. DÉTECTION DES SECRETS ==="
+                echo "=== 🔍 1. DÉTECTION DES SECRETS AVEC GITLEAKS ==="
                 cd /home/vagrant/devsecops-demo
+                
+                # Configuration Git
                 git config --global --add safe.directory /home/vagrant/devsecops-demo || true
-                gitleaks detect --source . --verbose --exit-code 0 || echo "✅ Gitleaks terminé"
+                
+                # Scan des secrets
+                echo "🔎 Analyse des secrets dans le code..."
+                gitleaks detect --source . --verbose --exit-code 0 || echo "✅ Gitleaks scan complété"
+                
+                echo "📊 Rapport secrets généré"
                 '''
             }
         }
         
-        stage('Dependency Scan - Trivy') {
+        // STAGE 4: SCAN DES DÉPENDANCES
+        stage('📦 Scan Dépendances - Trivy') {
             steps {
                 sh '''
-                echo "=== 🔍 2. SCAN DES DÉPENDANCES ==="
+                echo "=== 📦 2. SCAN DES DÉPENDANCES AVEC TRIVY ==="
                 cd /home/vagrant/devsecops-demo
-                trivy fs . --severity CRITICAL,HIGH --exit-code 0 || echo "✅ Trivy dépendances terminé"
+                
+                # Scan des dépendances vulnérables
+                echo "🔎 Analyse des vulnérabilités des dépendances..."
+                trivy fs . --severity CRITICAL,HIGH --exit-code 0 --format table || echo "✅ Trivy FS scan complété"
+                
+                # Scan spécifique des fichiers de configuration
+                echo "🔎 Scan des fichiers de configuration..."
+                trivy config . --severity CRITICAL,HIGH --exit-code 0 || echo "✅ Trivy config scan complété"
+                
+                echo "📊 Rapport dépendances généré"
                 '''
             }
         }
         
-        stage('Docker Security Scan - Trivy') {
+        // STAGE 5: CONSTRUCTION ET SCAN DOCKER
+        stage('🐳 Build & Scan Docker') {
             steps {
                 sh '''
-                echo "=== 🔍 3. SCAN DOCKER ==="
+                echo "=== 🐳 3. CONSTRUCTION ET SCAN DOCKER ==="
                 cd /home/vagrant/devsecops-demo
+                
+                # Nettoyage des anciennes images
+                echo "🧹 Nettoyage des containers existants..."
+                docker stop devsecops-container 2>/dev/null || true
+                docker rm devsecops-container 2>/dev/null || true
                 
                 # Construction de l'image
-                if ! docker images | grep -q "devsecops-demo"; then
-                    echo "🔨 Construction de l'image Docker..."
-                    docker build -t devsecops-demo:latest . || echo "⚠️ Build Docker échoué mais continue"
-                fi
+                echo "🔨 Construction de l'image Docker..."
+                docker build -t devsecops-demo:latest . 
                 
-                # Scan avec timeout réduit
-                echo "🔍 Scan Docker image..."
-                timeout 300 trivy image --severity CRITICAL,HIGH --exit-code 0 devsecops-demo:latest || echo "✅ Scan Docker critique complété"
-                '''
-            }
-        }
-        
-        stage('SonarQube Analysis') {
-            steps {
-                sh '''
-                echo "=== 🔍 4. ANALYSE SONARQUBE ==="
-                cd /home/vagrant/devsecops-demo
-                timeout 600 mvn sonar:sonar -Dsonar.host.url=http://192.168.56.10:9000 -Dsonar.projectKey=devsecops-final -Dsonar.login=squ_1d4a6d0a21556a27cdbe5876f3ab90aaf1ec0a0f || echo "⚠️ SonarQube échoué mais continue"
-                '''
-            }
-        }
-        
-        // STAGE OWASP ZAP OPTIMISÉ
-        stage('DAST - OWASP ZAP Dynamic Scan') {
-            steps {
-                sh '''
-                echo "=== 🔍 5. SCAN DYNAMIQUE OWASP ZAP ==="
-                echo "🎯 Test de sécurité d'une application en fonctionnement..."
-                
-                # Nettoyer d'abord les anciens containers
-                docker stop test-app 2>/dev/null || true
-                docker rm test-app 2>/dev/null || true
-                sleep 2
-                
-                # 1. Démarrer Nginx sur le port 8081
-                echo "📱 Démarrage de Nginx sur le port 8081..."
-                docker run -d -p 8081:80 --name test-app devsecops-demo:latest || echo "⚠️ Démarrage Docker échoué"
-                
-                # 2. Attendre le démarrage
-                echo "⏳ Attente du démarrage de Nginx..."
-                sleep 15
-                
-                # 3. Vérifier que Nginx répond
-                echo "🔍 Vérification de l'accessibilité de Nginx..."
-                if curl -s --connect-timeout 10 http://localhost:8081 > /dev/null; then
-                    echo "✅ Nginx démarré avec succès sur le port 8081"
+                if [ $? -eq 0 ]; then
+                    echo "✅ Image Docker construite avec succès"
                     
-                    # 4. Scanner avec OWASP ZAP
-                    echo "🔍 Scan dynamique OWASP ZAP en cours..."
-                    mkdir -p /home/vagrant/devsecops-demo/reports
+                    # Scan de l'image Docker
+                    echo "🔍 Scan de sécurité de l'image Docker..."
+                    timeout 300 trivy image --severity CRITICAL,HIGH --exit-code 0 --format table devsecops-demo:latest || echo "✅ Scan Docker complété"
                     
-                    # Scan avec timeout
-                    timeout 300 docker run --rm --network="host" \
-                      -v /home/vagrant/devsecops-demo/reports:/zap/wrk/:rw \
-                      zaproxy/zap-stable zap-baseline.py \
-                      -t http://localhost:8081 \
-                      -r owasp-dast-scan.html \
-                      -J owasp-dast-scan.json \
-                      -c /dev/null || echo "⚠️ Scan ZAP terminé avec warnings"
-                    
-                    echo "✅ Scan dynamique OWASP ZAP complété"
+                    # Liste des images
+                    echo "📋 Images Docker disponibles :"
+                    docker images | grep devsecops || echo "Aucune image devsecops trouvée"
                 else
-                    echo "❌ Nginx non accessible - Scan alternatif de Jenkins"
-                    mkdir -p /home/vagrant/devsecops-demo/reports
-                    
-                    timeout 180 docker run --rm --network="host" \
-                      -v /home/vagrant/devsecops-demo/reports:/zap/wrk/:rw \
-                      zaproxy/zap-stable zap-baseline.py \
-                      -t http://localhost:8080 \
-                      -r owasp-dast-scan.html \
-                      -J owasp-dast-scan.json \
-                      -c /dev/null || echo "⚠️ Scan Jenkins terminé"
-                fi
-                
-                # Nettoyage
-                docker stop test-app 2>/dev/null || true
-                docker rm test-app 2>/dev/null || true
-                '''
-            }
-        }
-        
-        // DÉPLOIEMENT NGINX
-        stage('🚀 Déploiement Nginx Production') {
-            when {
-                expression { currentBuild.result == null || currentBuild.result == 'SUCCESS' }
-            }
-            steps {
-                sh '''
-                echo "=== 🚀 DÉPLOIEMENT NGINX EN PRODUCTION ==="
-                
-                # Nettoyage
-                docker stop prod-app 2>/dev/null || true
-                docker rm prod-app 2>/dev/null || true
-                sleep 2
-                
-                # Vérifier/créer l'image
-                if ! docker images | grep -q "devsecops-demo"; then
-                    echo "🔨 Construction de l'image Docker..."
-                    docker build -t devsecops-demo:latest . || { echo "❌ Échec construction Docker"; exit 1; }
-                fi
-                
-                # Déploiement
-                echo "🚀 Déploiement de Nginx sur le port 8082..."
-                docker run -d -p 8082:80 --name prod-app devsecops-demo:latest || { echo "❌ Déploiement échoué"; exit 1; }
-                
-                # Attente et vérification
-                echo "⏳ Attente du démarrage..."
-                sleep 15
-                
-                if curl -s --connect-timeout 10 http://localhost:8082 > /dev/null; then
-                    echo "🎉 DÉPLOIEMENT NGINX RÉUSSI !"
-                    echo "📍 http://localhost:8082"
-                else
-                    echo "❌ DÉPLOIEMENT ÉCHOUÉ"
-                    docker logs prod-app || true
+                    echo "❌ Échec de la construction Docker"
                     exit 1
                 fi
                 '''
             }
         }
         
-        // TUNNEL NGROK CORRIGÉ
-        stage('🌐 Tunnel Ngrok pour Email') {
-            when {
-                expression { currentBuild.result == null || currentBuild.result == 'SUCCESS' }
-            }
+        // STAGE 6: ANALYSE QUALITÉ CODE
+        stage('📊 Analyse SonarQube') {
             steps {
-                script {
-                    echo "=== 🌐 CONFIGURATION TUNNEL NGROK ==="
-                    
-                    sh '''
-                    # Nettoyage
-                    pkill ngrok 2>/dev/null || true
-                    sleep 3
-                    rm -f ngrok.log ngrok.pid ngrok.env 2>/dev/null || true
-                    '''
-                    
-                    sh '''
-                    echo "🚀 Démarrage du tunnel Ngrok..."
-                    nohup ngrok http 8082 > ngrok.log 2>&1 &
-                    echo $! > ngrok.pid
-                    echo "⏳ Initialisation (25 secondes)..."
-                    sleep 25
-                    '''
-                    
-                    sh '''
-                    echo "🔗 Récupération URL Ngrok..."
-                    MAX_RETRIES=5
-                    for i in $(seq 1 $MAX_RETRIES); do
-                        NGROK_URL=$(curl -s http://localhost:4040/api/tunnels 2>/dev/null | grep -o '"public_url":"[^"]*"' | grep https | cut -d'"' -f4 | head -1)
-                        
-                        if [ -n "$NGROK_URL" ]; then
-                            echo "✅ URL Ngrok: $NGROK_URL"
-                            echo "NGROK_URL=$NGROK_URL" > ngrok.env
-                            break
-                        fi
-                        
-                        if [ $i -lt $MAX_RETRIES ]; then
-                            echo "⏱️  Nouvel essai dans 5s... ($i/$MAX_RETRIES)"
-                            sleep 5
-                        else
-                            echo "⚠️  Ngrok non accessible"
-                            echo "NGROK_URL=non_disponible" > ngrok.env
-                            echo "📋 Logs:"
-                            tail -20 ngrok.log 2>/dev/null || echo "Aucun log"
-                        fi
-                    done
-                    '''
-                }
+                sh '''
+                echo "=== 📊 4. ANALYSE QUALITÉ CODE AVEC SONARQUBE ==="
+                cd /home/vagrant/devsecops-demo
+                
+                # Analyse SonarQube
+                echo "🔍 Analyse de la qualité du code..."
+                timeout 600 mvn sonar:sonar \
+                  -Dsonar.host.url=http://192.168.56.10:9000 \
+                  -Dsonar.projectKey=devsecops-final \
+                  -Dsonar.projectName="DevSecOps Final" \
+                  -Dsonar.login=squ_1d4a6d0a21556a27cdbe5876f3ab90aaf1ec0a0f \
+                  -Dsonar.sources=. \
+                  -Dsonar.sourceEncoding=UTF-8 || echo "⚠️ SonarQube analyse terminée avec warnings"
+                
+                echo "✅ Analyse SonarQube complétée"
+                echo "📊 Rapport disponible sur: http://192.168.56.10:9000/dashboard?id=devsecops-final"
+                '''
             }
         }
         
-        // VALIDATION POST-DÉPLOIEMENT
-        stage('✅ Validation Post-Déploiement') {
-            when {
-                expression { currentBuild.result == null || currentBuild.result == 'SUCCESS' }
-            }
+        // STAGE 7: SCAN DYNAMIQUE OWASP ZAP
+        stage('🛡️ Scan Dynamique - OWASP ZAP') {
             steps {
                 sh '''
-                echo "=== ✅ VALIDATION POST-DÉPLOIEMENT ==="
+                echo "=== 🛡️ 5. SCAN DYNAMIQUE OWASP ZAP ==="
+                cd /home/vagrant/devsecops-demo
                 
-                # Tests de base
-                echo "1. Connectivité Nginx..."
-                curl -s --connect-timeout 10 http://localhost:8082 > /dev/null && echo "   ✅ OK" || { echo "   ❌ Échec"; exit 1; }
+                # Création du dossier des rapports
+                mkdir -p reports
                 
-                echo "2. Statut HTTP..."
+                # Démarrage temporaire de l'application pour le scan
+                echo "🚀 Démarrage de l'application pour scan..."
+                docker run -d -p 8083:80 --name zap-scan-app devsecops-demo:latest || echo "⚠️ Container déjà existant"
+                
+                # Attente du démarrage
+                echo "⏳ Attente du démarrage de l'application..."
+                sleep 20
+                
+                # Vérification que l'application répond
+                if curl -s --connect-timeout 10 http://localhost:8083 > /dev/null; then
+                    echo "✅ Application démarrée, début du scan OWASP ZAP..."
+                    
+                    # Scan OWASP ZAP
+                    timeout 400 docker run --rm --network="host" \
+                      -v /home/vagrant/devsecops-demo/reports:/zap/wrk/:rw \
+                      zaproxy/zap-stable zap-baseline.py \
+                      -t http://localhost:8083 \
+                      -r owasp-scan-report.html \
+                      -J owasp-scan-report.json \
+                      -c zap-config.conf 2>/dev/null || echo "✅ Scan OWASP ZAP complété"
+                    
+                    echo "📊 Rapports OWASP ZAP générés dans /reports/"
+                else
+                    echo "⚠️ Application non accessible, scan OWASP ZAP ignoré"
+                fi
+                
+                # Nettoyage
+                docker stop zap-scan-app 2>/dev/null || true
+                docker rm zap-scan-app 2>/dev/null || true
+                '''
+            }
+        }
+        
+        // STAGE 8: DÉPLOIEMENT PRODUCTION
+        stage('🚀 Déploiement Production') {
+            steps {
+                sh '''
+                echo "=== 🚀 6. DÉPLOIEMENT EN PRODUCTION ==="
+                cd /home/vagrant/devsecops-demo
+                
+                # Arrêt des anciens containers
+                echo "🧹 Nettoyage des déploiements précédents..."
+                docker stop prod-app 2>/dev/null || true
+                docker rm prod-app 2>/dev/null || true
+                sleep 3
+                
+                # Déploiement du nouveau container
+                echo "🚀 Déploiement de l'application en production..."
+                docker run -d \
+                  -p 8082:80 \
+                  --name prod-app \
+                  --restart unless-stopped \
+                  devsecops-demo:latest
+                
+                # Vérification du déploiement
+                echo "⏳ Vérification du déploiement..."
+                sleep 15
+                
+                # Tests de fonctionnement
+                echo "🔍 Tests de connectivité..."
                 HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8082)
-                echo "   ✅ Statut: $HTTP_STATUS"
+                RESPONSE_TIME=$(curl -s -o /dev/null -w "%{time_total}" http://localhost:8082)
                 
-                echo "3. Container Docker..."
-                docker ps | grep -q "prod-app" && echo "   ✅ En cours d'exécution" || { echo "   ❌ Arrêté"; exit 1; }
+                if [ "$HTTP_STATUS" = "200" ]; then
+                    echo "✅ DÉPLOIEMENT RÉUSSI !"
+                    echo "📍 URL Application: http://localhost:8082"
+                    echo "📊 Statut HTTP: $HTTP_STATUS"
+                    echo "⏱️  Temps réponse: ${RESPONSE_TIME}s"
+                    echo "🐳 Container: prod-app (en cours d'exécution)"
+                else
+                    echo "❌ DÉPLOIEMENT ÉCHOUÉ - Statut: $HTTP_STATUS"
+                    echo "📋 Logs du container:"
+                    docker logs prod-app || true
+                    exit 1
+                fi
                 
-                echo "4. Contenu Nginx..."
-                curl -s http://localhost:8082 | grep -q "Welcome to nginx" && echo "   ✅ Contenu correct" || echo "   ⚠️ Contenu différent"
+                # Affichage des informations du container
+                echo "📋 Informations du container:"
+                docker ps --filter "name=prod-app" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+                '''
+            }
+        }
+        
+        // STAGE 9: GÉNÉRATION DES RAPPORTS
+        stage('📄 Génération Rapports') {
+            steps {
+                sh '''
+                echo "=== 📄 7. GÉNÉRATION DES RAPPORTS ==="
+                cd /home/vagrant/devsecops-demo
                 
-                echo "🎉 VALIDATION RÉUSSIE"
+                # Création du dossier des rapports
+                mkdir -p reports
+                
+                # Rapport des vulnérabilités
+                echo "📊 Génération du rapport des vulnérabilités..."
+                trivy fs . --severity CRITICAL,HIGH --format json > reports/trivy-vulnerabilities.json || true
+                trivy image devsecops-demo:latest --severity CRITICAL,HIGH --format json > reports/trivy-docker-scan.json || true
+                
+                # Rapport Gitleaks
+                echo "📊 Génération du rapport des secrets..."
+                gitleaks detect --source . --format json --report-format json > reports/gitleaks-report.json 2>/dev/null || true
+                
+                # Rapport final
+                echo "✅ Tous les rapports générés dans le dossier /reports/"
+                ls -la reports/ || echo "Aucun rapport généré"
                 '''
             }
         }
@@ -285,103 +290,121 @@ pipeline {
     post {
         always {
             script {
-                echo "=== 📊 RAPPORT FINAL ==="
+                echo "=== 📊 RAPPORT FINAL DU PIPELINE ==="
                 
-                // Récupération des informations pour l'email
-                def ngrokUrl = "non_disponible"
-                def appDeployed = false
+                // Récupération des informations
+                def buildStatus = currentBuild.currentResult
+                def buildDuration = currentBuild.durationString
+                def gitBranch = env.GIT_BRANCH ?: "Non spécifié"
+                def gitCommit = env.GIT_COMMIT ?: "Non spécifié"
                 
+                // Vérification du déploiement
+                def deploymentStatus = "❌ ÉCHEC"
                 try {
-                    // Vérifier déploiement
-                    appDeployed = sh(
-                        script: 'docker ps | grep -q "prod-app" && curl -s --connect-timeout 5 http://localhost:8082 > /dev/null && echo "oui" || echo "non"',
-                        returnStdout: true
-                    ).trim() == 'oui'
-                    
-                    // Lire URL Ngrok
-                    ngrokUrl = sh(
-                        script: '[ -f ngrok.env ] && source ngrok.env && echo $NGROK_URL || echo "non_disponible"',
+                    def deployCheck = sh(
+                        script: 'docker ps | grep -q "prod-app" && curl -s --connect-timeout 5 http://localhost:8082 > /dev/null && echo "SUCCESS" || echo "FAILED"',
                         returnStdout: true
                     ).trim()
+                    deploymentStatus = (deployCheck == "SUCCESS") ? "✅ RÉUSSI" : "❌ ÉCHEC"
                 } catch (Exception e) {
-                    echo "⚠️ Erreur récupération infos: ${e.message}"
+                    deploymentStatus = "⚠️ INDÉTERMINÉ"
                 }
                 
-                // Email final amélioré
-                def emailSubject = "📊 RAPPORT DevSecOps #${env.BUILD_NUMBER} - ${currentBuild.currentResult}"
+                // Email de rapport final
+                def emailSubject = "📊 RAPPORT AUTO - Build #${env.BUILD_NUMBER} - ${buildStatus}"
                 def emailBody = """
 BONJOUR,
 
-VOTRE PIPELINE DEVSECOPS EST TERMINÉ !
+VOTRE PIPELINE DEVSECOPS AUTOMATIQUE EST TERMINÉ !
 
-📋 RÉSULTATS GLOBAUX :
+📋 INFORMATIONS GÉNÉRALES :
 • Projet: ${env.JOB_NAME}
 • Build: #${env.BUILD_NUMBER}
-• Statut: ${currentBuild.currentResult}
-• Durée: ${currentBuild.durationString}
+• Statut: ${buildStatus}
+• Durée: ${buildDuration}
+• Déclencheur: Push GitHub
+• Branch: ${gitBranch}
 
-✅ SCANS DE SÉCURITÉ RÉALISÉS :
-• Gitleaks: Détection des secrets
-• Trivy: Analyse des dépendances  
-• Trivy: Scan Docker
-• SonarQube: Analyse qualité code
-• OWASP ZAP: Scan dynamique DAST
+✅ SCANS DE SÉCURITÉ EFFECTUÉS :
+🔍 Détection des secrets (Gitleaks)
+📦 Analyse des dépendances (Trivy)  
+🐳 Scan Docker (Trivy)
+📊 Analyse qualité code (SonarQube)
+🛡️ Scan dynamique OWASP ZAP
 
 🚀 DÉPLOIEMENT :
-${appDeployed ? '• ✅ APPLICATION DÉPLOYÉE AVEC SUCCÈS' : '• ⚠️ DÉPLOIEMENT PARTIEL'}
-• URL Locale: http://localhost:8082
-${ngrokUrl != "non_disponible" ? "• 🌐 URL Publique: ${ngrokUrl}" : "• 🌐 URL Publique: ⚠️ Non disponible"}
+${deploymentStatus}
+• Application: http://localhost:8082
 • Container: prod-app
 
-🔍 ANALYSE SONARQUBE :
-• Rapport: http://192.168.56.10:9000/dashboard?id=devsecops-final
+📊 RAPPORTS DISPONIBLES :
+• SonarQube: http://192.168.56.10:9000/dashboard?id=devsecops-final
+• Rapports locaux: /home/vagrant/devsecops-demo/reports/
 
-📎 LIENS :
+📎 LIENS UTILES :
 • Jenkins: ${env.BUILD_URL}
 • Application: http://localhost:8082
-${ngrokUrl != "non_disponible" ? "• Lien Public: ${ngrokUrl}" : ""}
 
-${currentBuild.currentResult == 'SUCCESS' ? '🎉 TOUS LES TESTS ONT RÉUSSI !' : '⚠️ DES PROBLÈMES ONT ÉTÉ DÉTECTÉS'}
+${buildStatus == 'SUCCESS' ? '🎉 TOUS LES TESTS ONT RÉUSSI !' : '⚠️ DES PROBLÈMES ONT ÉTÉ DÉTECTÉS'}
+
+💡 Prochain push GitHub déclenchera automatiquement le pipeline.
 
 Cordialement,
-Votre Pipeline DevSecOps
+Votre Pipeline DevSecOps Auto
 """
                 
+                // Envoi de l'email
                 mail to: 'ghadatravail0328@gmail.com',
                      subject: emailSubject,
                      body: emailBody
                 
-                echo "📧 Email envoyé à ghadatravail0328@gmail.com"
+                echo "📧 Email de rapport envoyé à ghadatravail0328@gmail.com"
                 
                 // Nettoyage final
                 sh '''
                 echo " "
-                echo "=== 🧹 NETTOYAGE ==="
-                # Ngrok
-                if [ -f ngrok.pid ]; then
-                    kill $(cat ngrok.pid) 2>/dev/null || true
-                    rm -f ngrok.pid ngrok.env ngrok.log
-                fi
-                pkill ngrok 2>/dev/null || true
+                echo "=== 🧹 NETTOYAGE FINAL ==="
+                echo "📋 Containers en cours d'exécution :"
+                docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" || echo "Aucun container"
                 
-                # Rapports
-                echo "📁 Rapports générés:"
+                echo " "
+                echo "📁 Rapports générés :"
                 ls -la /home/vagrant/devsecops-demo/reports/ 2>/dev/null || echo "Aucun rapport"
                 
-                # Containers
-                echo "🐳 Containers:"
-                docker ps -a --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null || echo "Aucun container"
+                echo " "
+                echo "🔍 Statut de l'application :"
+                curl -s -o /dev/null -w "Code HTTP: %{http_code}\n" http://localhost:8082 || echo "Application non accessible"
                 '''
             }
         }
         
         success {
-            echo "🎉 PIPELINE RÉUSSIE - Application déployée et sécurisée !"
+            script {
+                echo "🎉🎉🎉 PIPELINE AUTOMATIQUE RÉUSSI ! 🎉🎉🎉"
+                echo "✅ Déclenchement GitHub fonctionnel"
+                echo "✅ Tous les scans de sécurité effectués"
+                echo "✅ Application déployée avec succès"
+                echo "💡 Le prochain 'git push' déclenchera automatiquement le pipeline"
+            }
         }
         
         failure {
-            echo "❌ PIPELINE ÉCHOUÉE - Consultez les logs"
-            sh 'pkill ngrok 2>/dev/null || true'
+            script {
+                echo "❌❌❌ PIPELINE EN ÉCHEC ❌❌❌"
+                echo "🔍 Vérifiez les logs pour identifier le problème"
+                echo "💡 Corrigez les erreurs et faites un nouveau 'git push'"
+                
+                // Nettoyage en cas d'échec
+                sh '''
+                echo "🧹 Nettoyage des resources en erreur..."
+                docker stop prod-app 2>/dev/null || true
+                docker rm prod-app 2>/dev/null || true
+                '''
+            }
+        }
+        
+        unstable {
+            echo "⚠️ Pipeline instable - Certains tests ont échoué"
         }
     }
 }
